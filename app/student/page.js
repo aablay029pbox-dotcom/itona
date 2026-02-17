@@ -78,13 +78,14 @@ export default function StudentPage() {
         <input type="text" name="firstname" placeholder="First Name" value={formData.firstname} onChange={handleChange} style={inputStyle} />
         <select name="course" value={formData.course} onChange={handleChange} style={inputStyle}>
           <option value="">Select Course</option>
-          <option value="BSIT">BSCE</option>
-          <option value="BSCS">BSSE</option>
-          <option value="BSBA">BSCS</option>
-          <option value="BSCS">BSIT</option>
-          <option value="BSBA">BAT</option>
-          <option value="BSCS">RAT</option>
-          <option value="BSBA">EET</option>
+          <option value="BSCE">BSCE</option>
+          <option value="BSSE">BSSE</option>
+          <option value="BSCS">BSCS</option>
+          <option value="BSIT">BSIT</option>
+          <option value="BAT">BAT</option>
+          <option value="RAC">RAC</option>
+          <option value="EET">EET</option>
+          <option value="BET-MET-AUTO">BET-MET-AUTO</option>
         </select>
         <select name="yearSection" value={formData.yearSection} onChange={handleChange} style={inputStyle}>
           <option value="">Select Year & Section</option>
