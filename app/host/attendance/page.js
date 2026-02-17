@@ -354,12 +354,14 @@ const listContainerStyle = {
 
 const recordStyle = {
   backgroundColor: "white",
-  padding: "15px",
-  borderRadius: "8px",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+  padding: "20px",
+  borderRadius: "10px",
+  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
   display: "flex",
   flexDirection: "column",
-  gap: "8px"
+  gap: "12px",
+  fontSize: "16px",
+  color: "#000000" // ✅ fully black text
 };
 
 const checklistStyle = {
