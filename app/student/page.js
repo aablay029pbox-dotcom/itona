@@ -86,6 +86,7 @@ export default function StudentPage() {
           <option value="RAC">RAC</option>
           <option value="EET">EET</option>
           <option value="BET-MET-AUTO">BET-MET-AUTO</option>
+          <option value="BSMATH">BSMATH</option>
         </select>
         <select name="yearSection" value={formData.yearSection} onChange={handleChange} style={inputStyle}>
           <option value="">Select Year & Section</option>
