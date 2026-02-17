@@ -12,6 +12,33 @@ export default function Home() {
       <header style={{ backgroundColor: "#FFD700", padding: "20px", textAlign: "center" }}>
         <h1>Welcome</h1>
       </header>
+      {/* Left Image */}
+<img 
+  src="/left.png" // JPG image in public folder
+  alt="Left"
+  style={{
+    position: "absolute",
+    top: "10px",
+    left: "13px",
+    width: "55px",
+    height: "55px",
+    objectFit: "cover"
+  }}
+/>
+
+{/* Right Image */}
+<img 
+  src="/right.png" // JPG image in public folder
+  alt="Right"
+  style={{
+    position: "absolute",
+    top: "10px",
+    right: "13px",
+    width: "50px",
+    height: "50px",
+    objectFit: "cover"
+  }}
+/>
 
       {/* Main */}
       <main style={{

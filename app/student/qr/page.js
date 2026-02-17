@@ -27,6 +27,31 @@ export default function QRPage() {
       <header style={{ backgroundColor: "#FFD700", padding: "20px", textAlign: "center" }}>
         <h1>Your QR Code</h1>
       </header>
+      <img 
+  src="/left.png" 
+  alt="Left"
+  style={{
+    position: "absolute",
+    top: "10px",
+    left: "13px",
+    width: "55px",
+    height: "55px",
+    objectFit: "cover"
+  }}
+/>
+
+<img 
+  src="/right.png" 
+  alt="Right"
+  style={{
+    position: "absolute",
+    top: "10px",
+    right: "13px",
+    width: "50px",
+    height: "50px",
+    objectFit: "cover"
+  }}
+/>
 
       {/* Main */}
       <main

@@ -112,6 +112,32 @@ export default function StudentPage() {
           <option value="4E">4E</option>
 
         </select>
+        <img 
+  src="/left.png" 
+  alt="Left"
+  style={{
+    position: "absolute",
+    top: "10px",
+    left: "13px",
+    width: "55px",
+    height: "55px",
+    objectFit: "cover"
+  }}
+/>
+
+<img 
+  src="/right.png" 
+  alt="Right"
+  style={{
+    position: "absolute",
+    top: "10px",
+    right: "13px",
+    width: "50px",
+    height: "50px",
+    objectFit: "cover"
+  }}
+/>
+
         <button onClick={handleLogin} style={buttonStyle}>Login</button>
       </main>
       <footer style={headerFooterStyle}><p>© 2026</p></footer>
