@@ -22,8 +22,6 @@ export default function AttendancePage() {
     yearSection: ""
   });
 
-  const [downloadMode, setDownloadMode] = useState("all");
-
   useEffect(() => {
     fetchEvents();
   }, []);
@@ -45,7 +43,7 @@ export default function AttendancePage() {
   };
 
   // ============================
-  // FETCH ATTENDANCE (OPTIMIZED)
+  // FETCH ATTENDANCE
   // ============================
   const fetchAttendance = async () => {
     setLoading(true);
@@ -85,7 +83,9 @@ export default function AttendancePage() {
         if (!attendanceMap.has(a.student_id)) {
           attendanceMap.set(a.student_id, []);
         }
-        attendanceMap.get(a.student_id).push(a.event_id);
+        if (a.event_id) {
+          attendanceMap.get(a.student_id).push(a.event_id);
+        }
       });
 
       const grouped = students.map(student => ({
@@ -102,9 +102,53 @@ export default function AttendancePage() {
   };
 
   // ============================
-  // DOWNLOAD HELPER
+  // DELETE SINGLE STUDENT
   // ============================
-  const getDownloadData = () => records;
+  const deleteStudent = async (studentId) => {
+    const confirmDelete = confirm(
+      "Are you sure you want to delete this student?"
+    );
+    if (!confirmDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from("students")
+        .delete()
+        .eq("id", studentId);
+
+      if (error) throw error;
+
+      alert("Student deleted successfully!");
+      fetchAttendance();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete student.");
+    }
+  };
+
+  // ============================
+  // SAFE DELETE (RPC FUNCTION)
+  // ============================
+  const deleteStudentsWithoutValidEvents = async () => {
+    const confirmDelete = confirm(
+      "Delete students with ZERO valid events?"
+    );
+    if (!confirmDelete) return;
+
+    try {
+      const { error } = await supabase.rpc(
+        "delete_students_without_valid_events"
+      );
+
+      if (error) throw error;
+
+      alert("Cleanup complete!");
+      fetchAttendance();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete students.");
+    }
+  };
 
   // ============================
   // PDF EXPORT
@@ -118,7 +162,14 @@ export default function AttendancePage() {
     const doc = new jsPDF();
 
     const tableHead = [
-      ["Last Name", "First Name", "Course", "YearSection", "Total", ...events.map(evt => evt.name)]
+      [
+        "Last Name",
+        "First Name",
+        "Course",
+        "YearSection",
+        "Total",
+        ...events.map(evt => evt.name)
+      ]
     ];
 
     const tableBody = records.map(student => [
@@ -175,7 +226,6 @@ export default function AttendancePage() {
     XLSX.writeFile(workbook, "attendance.xlsx");
   };
 
-  // Unique Filters
   const uniqueCourses = [...new Set(records.map(r => r.course))];
   const uniqueYearSections = [...new Set(records.map(r => r.yearsection))];
 
@@ -185,23 +235,8 @@ export default function AttendancePage() {
         <h1>Attendance Records</h1>
       </header>
 
-      {/* Left Image */}
-      <img
-        src="/left.png"
-        alt="Left"
-        style={leftImageStyle}
-      />
-
-      {/* Right Image */}
-      <img
-        src="/right.png"
-        alt="Right"
-        style={rightImageStyle}
-      />
-
       <main style={mainStyle}>
 
-        {/* FILTERS */}
         <div style={filterContainerStyle}>
           <select
             value={filter.course}
@@ -232,14 +267,22 @@ export default function AttendancePage() {
           </select>
         </div>
 
-        {/* BUTTONS */}
         <div style={buttonContainerStyle}>
           <button style={buttonStyle} onClick={downloadPDF}>
             Download PDF
           </button>
+
           <button style={buttonStyle} onClick={downloadExcel}>
             Download Excel
           </button>
+
+          <button
+            style={{ ...buttonStyle, backgroundColor: "#b52b27" }}
+            onClick={deleteStudentsWithoutValidEvents}
+          >
+            Delete Zero Attendance
+          </button>
+
           <button
             style={buttonStyle}
             onClick={() => router.push("/host/dashboard")}
@@ -248,7 +291,6 @@ export default function AttendancePage() {
           </button>
         </div>
 
-        {/* STUDENT LIST */}
         {loading ? (
           <p>Loading...</p>
         ) : records.length === 0 ? (
@@ -282,6 +324,13 @@ export default function AttendancePage() {
                 <div style={{ fontWeight: "bold" }}>
                   Total: {student.events.length}
                 </div>
+
+                <button
+                  style={deleteButtonStyle}
+                  onClick={() => deleteStudent(student.id)}
+                >
+                  Delete
+                </button>
               </div>
             ))}
           </div>
@@ -297,7 +346,7 @@ export default function AttendancePage() {
 }
 
 // ============================
-// STYLES (Same as your first)
+// STYLES
 // ============================
 
 const containerStyle = {
@@ -361,6 +410,16 @@ const buttonStyle = {
   cursor: "pointer"
 };
 
+const deleteButtonStyle = {
+  backgroundColor: "#d9534f",
+  color: "white",
+  border: "none",
+  padding: "10px",
+  borderRadius: "6px",
+  cursor: "pointer",
+  alignSelf: "flex-start"
+};
+
 const listContainerStyle = {
   width: "100%",
   maxWidth: "900px",
@@ -378,29 +437,11 @@ const recordStyle = {
   flexDirection: "column",
   gap: "12px",
   fontSize: "16px",
-  color: "#000000"
+  color: "#000"
 };
 
 const checklistStyle = {
   display: "flex",
   flexWrap: "wrap",
   gap: "15px"
-};
-
-const leftImageStyle = {
-  position: "absolute",
-  top: "3px",
-  left: "13px",
-  width: "55px",
-  height: "55px",
-  objectFit: "cover"
-};
-
-const rightImageStyle = {
-  position: "absolute",
-  top: "3px",
-  right: "13px",
-  width: "50px",
-  height: "50px",
-  objectFit: "cover"
 };
