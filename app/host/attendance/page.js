@@ -4,132 +4,136 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable"; // ✅ Correct import
+import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+
+const PAGE_SIZE = 50;
 
 export default function AttendancePage() {
   const router = useRouter();
 
   const [events, setEvents] = useState([]);
   const [records, setRecords] = useState([]);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   const [filter, setFilter] = useState({
     course: "",
     yearSection: ""
   });
 
-  const [downloadMode, setDownloadMode] = useState("all"); // all, course, yearSection, both
+  const [downloadMode, setDownloadMode] = useState("all");
 
   useEffect(() => {
-    fetchEventsAndAttendance();
+    fetchEvents();
   }, []);
 
-  const fetchEventsAndAttendance = async () => {
+  useEffect(() => {
+    fetchAttendance();
+  }, [filter, page]);
+
+  // ============================
+  // FETCH EVENTS
+  // ============================
+  const fetchEvents = async () => {
+    const { data, error } = await supabase
+      .from("events")
+      .select("*")
+      .order("id");
+
+    if (!error) setEvents(data || []);
+  };
+
+  // ============================
+  // FETCH ATTENDANCE (OPTIMIZED)
+  // ============================
+  const fetchAttendance = async () => {
+    setLoading(true);
+
     try {
-      // 1️⃣ Fetch all events
-      const { data: eventsData, error: eventsError } = await supabase
-        .from("events")
-        .select("*");
-      if (eventsError) throw eventsError;
-      setEvents(eventsData || []);
+      let query = supabase
+        .from("students")
+        .select("*")
+        .order("lastname")
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-      // 2️⃣ Fetch all attendance
-      const { data: attendanceData, error: attError } = await supabase
-        .from("attendance")
-        .select("*");
-      if (attError) throw attError;
+      if (filter.course) query = query.eq("course", filter.course);
+      if (filter.yearSection)
+        query = query.eq("yearsection", filter.yearSection);
 
-      if (!attendanceData || attendanceData.length === 0) {
+      const { data: students, error } = await query;
+      if (error) throw error;
+
+      if (!students || students.length === 0) {
         setRecords([]);
+        setLoading(false);
         return;
       }
 
-      const studentIds = [...new Set(attendanceData.map(a => a.student_id))];
+      const studentIds = students.map(s => s.id);
 
-      // 3️⃣ Fetch students
-      const { data: studentsData, error: stuError } = await supabase
-        .from("students")
+      const { data: attendanceData, error: attError } = await supabase
+        .from("attendance")
         .select("*")
-        .in("id", studentIds);
-      if (stuError) throw stuError;
+        .in("student_id", studentIds);
 
-      // 4️⃣ Group attendance per student
-      const grouped = studentsData.map(student => {
-        const studentAttendance = attendanceData.filter(
-          a => a.student_id === student.id
-        );
+      if (attError) throw attError;
 
-        return {
-          ...student,
-          events: studentAttendance.map(a => a.event_id)
-        };
+      const attendanceMap = new Map();
+
+      attendanceData.forEach(a => {
+        if (!attendanceMap.has(a.student_id)) {
+          attendanceMap.set(a.student_id, []);
+        }
+        attendanceMap.get(a.student_id).push(a.event_id);
       });
 
-      grouped.sort((a, b) => a.lastname.localeCompare(b.lastname));
+      const grouped = students.map(student => ({
+        ...student,
+        events: attendanceMap.get(student.id) || []
+      }));
+
       setRecords(grouped);
-
     } catch (err) {
-      console.error("Failed to fetch data:", err);
+      console.error("Fetch error:", err);
     }
+
+    setLoading(false);
   };
 
   // ============================
-  // FILTER LOGIC
+  // DOWNLOAD HELPER
   // ============================
-  const uniqueCourses = [...new Set(records.map(r => r.course))];
-  const uniqueYearSections = [...new Set(records.map(r => r.yearsection))];
-
-  const filteredRecords = records.filter(r =>
-    (!filter.course || r.course === filter.course) &&
-    (!filter.yearSection || r.yearsection === filter.yearSection)
-  );
-
-  // ============================
-  // DOWNLOAD DATA HELPER
-  // ============================
-  const getDownloadData = () => {
-    switch (downloadMode) {
-      case "all":
-        return records;
-      case "course":
-        return filter.course ? records.filter(r => r.course === filter.course) : [];
-      case "yearSection":
-        return filter.yearSection ? records.filter(r => r.yearsection === filter.yearSection) : [];
-      case "both":
-        return (filter.course && filter.yearSection)
-          ? records.filter(r => r.course === filter.course && r.yearsection === filter.yearSection)
-          : [];
-      default:
-        return records;
-    }
-  };
+  const getDownloadData = () => records;
 
   // ============================
   // PDF EXPORT
   // ============================
   const downloadPDF = () => {
-    const exportData = getDownloadData();
-
-    if (exportData.length === 0) {
-      alert("No records to export with current selection.");
+    if (records.length === 0) {
+      alert("No records to export.");
       return;
     }
 
     const doc = new jsPDF();
+
     const tableHead = [
       ["Last Name", "First Name", "Course", "YearSection", "Total", ...events.map(evt => evt.name)]
     ];
 
-    const tableBody = exportData.map(student => [
+    const tableBody = records.map(student => [
       student.lastname,
       student.firstname,
       student.course,
       student.yearsection,
       student.events.length,
-      ...events.map(evt => student.events.includes(evt.id) ? "✔" : "")
+      ...events.map(evt =>
+        student.events.includes(evt.id) ? "✔" : ""
+      )
     ]);
 
     doc.text("Attendance Records", 14, 20);
+
     autoTable(doc, {
       head: tableHead,
       body: tableBody,
@@ -143,17 +147,16 @@ export default function AttendancePage() {
   // EXCEL EXPORT
   // ============================
   const downloadExcel = () => {
-    const exportData = getDownloadData();
-
-    if (exportData.length === 0) {
-      alert("No records to export with current selection.");
+    if (records.length === 0) {
+      alert("No records to export.");
       return;
     }
 
-    const dataForExcel = exportData.map(student => {
+    const dataForExcel = records.map(student => {
       const eventChecklist = {};
       events.forEach(evt => {
-        eventChecklist[evt.name] = student.events.includes(evt.id) ? "✔" : "";
+        eventChecklist[evt.name] =
+          student.events.includes(evt.id) ? "✔" : "";
       });
 
       return {
@@ -161,7 +164,7 @@ export default function AttendancePage() {
         Firstname: student.firstname,
         Course: student.course,
         YearSection: student.yearsection,
-        TotalEventsAttended: student.events.length,
+        TotalEvents: student.events.length,
         ...eventChecklist
       };
     });
@@ -172,44 +175,40 @@ export default function AttendancePage() {
     XLSX.writeFile(workbook, "attendance.xlsx");
   };
 
+  // Unique Filters
+  const uniqueCourses = [...new Set(records.map(r => r.course))];
+  const uniqueYearSections = [...new Set(records.map(r => r.yearsection))];
+
   return (
     <div style={containerStyle}>
       <header style={headerStyle}>
         <h1>Attendance Records</h1>
       </header>
-      <img 
-  src="/left.png" 
-  alt="Left"
-  style={{
-    position: "absolute",
-    top: "3px",
-    left: "13px",
-    width: "55px",
-    height: "55px",
-    objectFit: "cover"
-  }}
-/>
 
-<img 
-  src="/right.png" 
-  alt="Right"
-  style={{
-    position: "absolute",
-    top: "3px",
-    right: "13px",
-    width: "50px",
-    height: "50px",
-    objectFit: "cover"
-  }}
-/>
+      {/* Left Image */}
+      <img
+        src="/left.png"
+        alt="Left"
+        style={leftImageStyle}
+      />
+
+      {/* Right Image */}
+      <img
+        src="/right.png"
+        alt="Right"
+        style={rightImageStyle}
+      />
 
       <main style={mainStyle}>
 
-        {/* FILTER + DOWNLOAD MODE */}
+        {/* FILTERS */}
         <div style={filterContainerStyle}>
           <select
             value={filter.course}
-            onChange={e => setFilter({ ...filter, course: e.target.value })}
+            onChange={e => {
+              setPage(0);
+              setFilter({ ...filter, course: e.target.value });
+            }}
             style={dropdownStyle}
           >
             <option value="">All Courses</option>
@@ -220,26 +219,16 @@ export default function AttendancePage() {
 
           <select
             value={filter.yearSection}
-            onChange={e =>
-              setFilter({ ...filter, yearSection: e.target.value })
-            }
+            onChange={e => {
+              setPage(0);
+              setFilter({ ...filter, yearSection: e.target.value });
+            }}
             style={dropdownStyle}
           >
             <option value="">All YearSections</option>
             {uniqueYearSections.map(ys => (
               <option key={ys} value={ys}>{ys}</option>
             ))}
-          </select>
-
-          <select
-            value={downloadMode}
-            onChange={e => setDownloadMode(e.target.value)}
-            style={dropdownStyle}
-          >
-            <option value="all">Download All</option>
-            <option value="course">By Course</option>
-            <option value="yearSection">By YearSection</option>
-            <option value="both">By Course + YearSection</option>
           </select>
         </div>
 
@@ -260,11 +249,13 @@ export default function AttendancePage() {
         </div>
 
         {/* STUDENT LIST */}
-        {filteredRecords.length === 0 ? (
+        {loading ? (
+          <p>Loading...</p>
+        ) : records.length === 0 ? (
           <p>No attendance records.</p>
         ) : (
           <div style={listContainerStyle}>
-            {filteredRecords.map(student => (
+            {records.map(student => (
               <div key={student.id} style={recordStyle}>
                 <div>
                   <strong>
@@ -295,6 +286,7 @@ export default function AttendancePage() {
             ))}
           </div>
         )}
+
       </main>
 
       <footer style={footerStyle}>
@@ -305,7 +297,7 @@ export default function AttendancePage() {
 }
 
 // ============================
-// STYLES
+// STYLES (Same as your first)
 // ============================
 
 const containerStyle = {
@@ -386,11 +378,29 @@ const recordStyle = {
   flexDirection: "column",
   gap: "12px",
   fontSize: "16px",
-  color: "#000000" // ✅ fully black text
+  color: "#000000"
 };
 
 const checklistStyle = {
   display: "flex",
   flexWrap: "wrap",
   gap: "15px"
+};
+
+const leftImageStyle = {
+  position: "absolute",
+  top: "3px",
+  left: "13px",
+  width: "55px",
+  height: "55px",
+  objectFit: "cover"
+};
+
+const rightImageStyle = {
+  position: "absolute",
+  top: "3px",
+  right: "13px",
+  width: "50px",
+  height: "50px",
+  objectFit: "cover"
 };
