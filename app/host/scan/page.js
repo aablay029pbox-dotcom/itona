@@ -8,24 +8,26 @@ import { supabase } from "../../lib/supabase";
 export default function ScanPage() {
   const router = useRouter();
 
-  const [message, setMessage] = useState("");
-  const [recentScans, setRecentScans] = useState(new Set());
-  const [selectedEvent, setSelectedEvent] = useState(""); // dropdown value
-  const [events, setEvents] = useState([]); // events list
+  const [events, setEvents] = useState([]);
+  const [selectedEvent, setSelectedEvent] = useState("");
+
+  const [popupType, setPopupType] = useState(null); 
+  // "success" | "already" | "error"
+
+  const [popupMessage, setPopupMessage] = useState("");
+  const [scannedStudent, setScannedStudent] = useState(null);
 
   const selectedEventRef = useRef(selectedEvent);
   const videoRef = useRef(null);
   const codeReaderRef = useRef(null);
-  const scanLockRef = useRef(false); // prevents multiple successful scans instantly
+  const scanLockRef = useRef(false);
 
-  // Keep the ref updated with the latest selected event
   useEffect(() => {
     selectedEventRef.current = selectedEvent;
   }, [selectedEvent]);
 
   useEffect(() => {
     fetchEvents();
-
     codeReaderRef.current = new BrowserMultiFormatReader();
     startScanner();
 
@@ -36,58 +38,41 @@ export default function ScanPage() {
     };
   }, []);
 
-  // Fetch all events from the table
   const fetchEvents = async () => {
-    try {
-      const { data, error } = await supabase.from("events").select("*");
-      if (error) throw error;
-
-      setEvents(data || []);
-      if (data && data.length > 0) setSelectedEvent(data[0].id); // default first event
-    } catch (err) {
-      console.error("Failed to fetch events:", err);
-      setMessage("❌ Failed to load events");
-    }
+    const { data } = await supabase.from("events").select("*");
+    setEvents(data || []);
+    if (data && data.length > 0) setSelectedEvent(data[0].id);
   };
 
   const startScanner = async () => {
     if (!videoRef.current) return;
 
-    try {
-      await codeReaderRef.current.decodeFromVideoDevice(
-        null,
-        videoRef.current,
-        async (result, err) => {
-          if (err && err.name !== "NotFoundException") {
-            console.error(err);
-          }
+    await codeReaderRef.current.decodeFromVideoDevice(
+      null,
+      videoRef.current,
+      async (result, err) => {
+        if (err && err.name !== "NotFoundException") {
+          console.error(err);
+        }
 
-          if (result && !scanLockRef.current) {
-            const scannedText = result.getText();
+        if (result && !scanLockRef.current) {
+          const success = await handleScan(result.getText());
 
-            // Only lock after a successful scan
-            const success = await handleScan(scannedText);
-            if (success) {
-              scanLockRef.current = true;
-              setTimeout(() => {
-                scanLockRef.current = false;
-              }, 2000);
-            }
+          if (success) {
+            scanLockRef.current = true;
+            setTimeout(() => {
+              scanLockRef.current = false;
+            }, 2000);
           }
         }
-      );
-    } catch (err) {
-      console.error("Scanner init error:", err);
-      setMessage("Failed to start scanner. Check camera permissions.");
-    }
+      }
+    );
   };
 
   const handleScan = async (scannedText) => {
-    if (!scannedText) return false;
-
     const eventId = selectedEventRef.current;
     if (!eventId) {
-      setMessage("Please select an event before scanning!");
+      showPopup("error", "Please select an event first.");
       return false;
     }
 
@@ -95,95 +80,82 @@ export default function ScanPage() {
     try {
       const data = JSON.parse(scannedText);
       studentId = data.id?.trim();
-      if (!studentId) throw new Error("No ID found in QR");
+      if (!studentId) throw new Error();
     } catch {
-      setMessage("❌ Invalid QR code format. Try again.");
+      showPopup("error", "Invalid QR Code format.");
       return false;
     }
-
-    if (recentScans.has(studentId)) {
-      setMessage(`⚠️ Already scanned: ${studentId}`);
-      return false;
-    }
-
-    // Temporarily mark to prevent duplicates
-    setRecentScans((prev) => new Set(prev).add(studentId));
-    setTimeout(() => {
-      setRecentScans((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(studentId);
-        return newSet;
-      });
-    }, 5000);
 
     try {
-      const { data: existing, error: checkError } = await supabase
+      // Get student info
+      const { data: student } = await supabase
+        .from("students")
+        .select("*")
+        .eq("id", studentId)
+        .single();
+
+      if (!student) {
+        showPopup("error", "Student not found.");
+        return false;
+      }
+
+      // Check if already attended
+      const { data: existing } = await supabase
         .from("attendance")
         .select("*")
         .eq("student_id", studentId)
         .eq("event_id", eventId)
         .maybeSingle();
 
-      if (checkError) throw checkError;
       if (existing) {
-        setMessage(`⚠️ Student ID ${studentId} already marked for this event!`);
+        setScannedStudent(student);
+        showPopup("already", "Student already attended this event.");
         return false;
       }
 
+      // Insert attendance
       const { error } = await supabase.from("attendance").insert([
         { student_id: studentId, event_id: eventId },
       ]);
+
       if (error) throw error;
 
-      setMessage(`✅ Attendance marked for Student ID: ${studentId}`);
-      return true; // success
+      setScannedStudent(student);
+      showPopup("success", "Attendance successfully recorded.");
+      return true;
+
     } catch (err) {
       console.error(err);
-      setMessage("❌ Failed to mark attendance. Try again.");
+      showPopup("error", "Failed to mark attendance.");
       return false;
     }
   };
 
-  // Retry handler
-  const handleRetry = () => {
-    setMessage(""); // clear message
+  const showPopup = (type, message) => {
+    setPopupType(type);
+    setPopupMessage(message);
+  };
+
+  const closePopup = () => {
+    setPopupType(null);
+    setPopupMessage("");
+    setScannedStudent(null);
+  };
+
+  const getPopupColor = () => {
+    if (popupType === "success") return "#28a745";
+    if (popupType === "already") return "#ff9800";
+    return "#dc3545";
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      
       <header style={headerFooterStyle}>
         <h1>Scan QR Code</h1>
       </header>
-<img 
-  src="/left.png" 
-  alt="Left"
-  style={{
-    position: "absolute",
-    top: "10px",
-    left: "13px",
-    width: "55px",
-    height: "55px",
-    objectFit: "cover"
-  }}
-/>
-
-<img 
-  src="/right.png" 
-  alt="Right"
-  style={{
-    position: "absolute",
-    top: "10px",
-    right: "13px",
-    width: "50px",
-    height: "50px",
-    objectFit: "cover"
-  }}
-/>
 
       <main style={mainStyle}>
-        <p>{message}</p>
-
-        {/* Event dropdown */}
         {events.length > 0 && (
           <select
             value={selectedEvent}
@@ -200,17 +172,8 @@ export default function ScanPage() {
 
         <video
           ref={videoRef}
-          style={{
-            width: "100%",
-            maxWidth: "400px",
-            borderRadius: "8px",
-          }}
+          style={{ width: "100%", maxWidth: "400px", borderRadius: "8px" }}
         />
-
-        {/* Retry Button */}
-        <button style={retryButtonStyle} onClick={handleRetry}>
-          Retry Scan
-        </button>
 
         <button style={buttonStyle} onClick={() => router.push("/host/dashboard")}>
           Back to Dashboard
@@ -220,13 +183,36 @@ export default function ScanPage() {
       <footer style={headerFooterStyle}>
         <p>© 2026</p>
       </footer>
+
+      {/* UNIVERSAL POPUP */}
+      {popupType && (
+        <div style={popupOverlay} onClick={closePopup}>
+          <div style={{ ...popupBox, borderTop: `8px solid ${getPopupColor()}` }}>
+            <h2 style={{ color: getPopupColor(), marginBottom: "15px" }}>
+              {popupMessage}
+            </h2>
+
+            {scannedStudent && (
+              <>
+                <p><strong>Last Name:</strong> {scannedStudent.lastname}</p>
+                <p><strong>First Name:</strong> {scannedStudent.firstname}</p>
+                <p><strong>Course:</strong> {scannedStudent.course}</p>
+                <p><strong>Section:</strong> {scannedStudent.yearsection}</p>
+              </>
+            )}
+
+            <p style={{ marginTop: "15px", fontSize: "14px", color: "#888" }}>
+              (Click anywhere to close)
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ------------------------
-// Styles
-// ------------------------
+/* ---------------- Styles ---------------- */
+
 const headerFooterStyle = {
   backgroundColor: "#FFD700",
   padding: "20px",
@@ -254,21 +240,32 @@ const buttonStyle = {
   width: "180px",
 };
 
-const retryButtonStyle = {
-  padding: "10px 25px",
-  fontSize: "16px",
-  borderRadius: "8px",
-  border: "none",
-  backgroundColor: "#00aaff",
-  color: "white",
-  cursor: "pointer",
-  width: "150px",
-};
-
 const dropdownStyle = {
   padding: "10px",
   borderRadius: "8px",
   border: "1px solid #ccc",
   width: "200px",
   fontSize: "16px",
+};
+
+const popupOverlay = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100%",
+  backgroundColor: "rgba(0,0,0,0.5)",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  cursor: "pointer",
+};
+
+const popupBox = {
+  backgroundColor: "white",
+  padding: "30px",
+  borderRadius: "12px",
+  textAlign: "center",
+  width: "320px",
+  boxShadow: "0 5px 15px rgba(0,0,0,0.3)",
 };
