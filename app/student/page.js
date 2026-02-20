@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function StudentPage() {
@@ -13,22 +13,6 @@ export default function StudentPage() {
     course: "",
     yearSection: ""
   });
-
-  // ✅ Check if already logged in today
-  useEffect(() => {
-    const student = localStorage.getItem("studentInfo");
-
-    if (student) {
-      const parsed = JSON.parse(student);
-      const today = new Date().toISOString().split("T")[0];
-
-      if (parsed.loginDate === today) {
-        router.push("/student/qr");
-      } else {
-        localStorage.removeItem("studentInfo");
-      }
-    }
-  }, [router]);
 
   const handleChange = (e) => {
     setFormData({
@@ -45,12 +29,12 @@ export default function StudentPage() {
       return;
     }
 
-    // ✅ Clean inputs (prevents duplicate because of spaces or casing)
+    // Clean inputs
     lastname = lastname.trim();
     firstname = firstname.trim();
 
     try {
-      // 🔍 1️⃣ Check if student already exists
+      // 1️⃣ Check if student already exists
       const { data: existingStudent, error: fetchError } = await supabase
         .from("students")
         .select("*")
@@ -64,11 +48,11 @@ export default function StudentPage() {
 
       let studentRecord;
 
-      // ✅ 2️⃣ If exists → use it
+      // 2️⃣ If exists → use it
       if (existingStudent) {
         studentRecord = existingStudent;
       } else {
-        // ➕ 3️⃣ If not exists → insert new
+        // 3️⃣ If not exists → insert new
         const { data: inserted, error: insertError } = await supabase
           .from("students")
           .insert([
@@ -76,7 +60,7 @@ export default function StudentPage() {
               lastname,
               firstname,
               course,
-              yearsection: yearsection
+              yearsection: yearSection
             }
           ])
           .select()
@@ -87,16 +71,13 @@ export default function StudentPage() {
         studentRecord = inserted;
       }
 
-      // ✅ Save login date
-      const today = new Date().toISOString().split("T")[0];
-
+      // Save student info (no loginDate)
       const studentData = {
         id: studentRecord.id,
         firstname: studentRecord.firstname,
         lastname: studentRecord.lastname,
         course: studentRecord.course,
-        yearsection: studentRecord.yearsection,
-        loginDate: today
+        yearsection: studentRecord.yearsection
       };
 
       localStorage.setItem("studentInfo", JSON.stringify(studentData));
@@ -117,7 +98,7 @@ export default function StudentPage() {
       </header>
 
       <main style={mainStyle}>
-        
+
         <input
           type="text"
           name="lastname"
@@ -161,41 +142,15 @@ export default function StudentPage() {
           style={inputStyle}
         >
           <option value="">Select Year & Section</option>
-          {["1A","1B","1C","1D","1E",
+          {[
+            "1A","1B","1C","1D","1E",
             "2A","2B","2C","2D","2E",
             "3A","3B","3C","3D","3E",
-            "4A","4B","4C","4D","4E"].map((ys) => (
-              <option key={ys} value={ys}>{ys}</option>
+            "4A","4B","4C","4D","4E"
+          ].map((ys) => (
+            <option key={ys} value={ys}>{ys}</option>
           ))}
         </select>
-
-        {/* Left Logo */}
-        <img
-          src="/left.png"
-          alt="Left"
-          style={{
-            position: "absolute",
-            top: "10px",
-            left: "13px",
-            width: "55px",
-            height: "55px",
-            objectFit: "cover"
-          }}
-        />
-
-        {/* Right Logo */}
-        <img
-          src="/right.png"
-          alt="Right"
-          style={{
-            position: "absolute",
-            top: "10px",
-            right: "13px",
-            width: "50px",
-            height: "50px",
-            objectFit: "cover"
-          }}
-        />
 
         <button onClick={handleLogin} style={buttonStyle}>
           Login
