@@ -76,7 +76,7 @@ export default function StudentPage() {
               lastname,
               firstname,
               course,
-              yearsection: yearSection
+              yearsection: yearsection
             }
           ])
           .select()
