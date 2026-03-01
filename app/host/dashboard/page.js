@@ -17,7 +17,22 @@ export default function HostDashboard() {
         return;
       }
 
-      // Verify session with Supabase
+      setLoading(false); // Initial load is done
+    };
+
+    verifyHost();
+
+    // ---------------------------
+    // LIVE SESSION CHECK
+    // ---------------------------
+    const interval = setInterval(async () => {
+      const hostInfo = JSON.parse(sessionStorage.getItem("hostInfo"));
+      if (!hostInfo?.id) {
+        clearInterval(interval);
+        router.push("/host");
+        return;
+      }
+
       const { data: hostData, error } = await supabase
         .from("hosts")
         .select("current_session")
@@ -25,50 +40,45 @@ export default function HostDashboard() {
         .single();
 
       if (error || hostData?.current_session !== hostInfo.current_session) {
-        // Session mismatch → force logout
+        // Admin cleared the session → force logout
         sessionStorage.removeItem("hostInfo");
+        clearInterval(interval);
+        alert("You have been logged out by the admin.");
         router.push("/host");
-        return;
       }
+    }, 5000); // Check every 5 seconds
 
-      setLoading(false); // Host is verified
-    };
+    return () => clearInterval(interval);
+  }, [router]);
 
-    verifyHost();
-  }, []);
-
-  // ===========================
+  // ---------------------------
   // LOGOUT FUNCTION
-  // ===========================
+  // ---------------------------
   const handleLogout = async () => {
     const hostInfo = JSON.parse(sessionStorage.getItem("hostInfo"));
 
     if (hostInfo?.id) {
-      // Clear session in Supabase
       await supabase
         .from("hosts")
         .update({ current_session: null })
         .eq("id", hostInfo.id);
     }
 
-    // Clear sessionStorage
     sessionStorage.removeItem("hostInfo");
-
-    // Redirect to login
     router.push("/host");
   };
 
-  if (loading) return <p style={{ textAlign: "center", marginTop: "50px" }}>Loading...</p>;
+  if (loading)
+    return <p style={{ textAlign: "center", marginTop: "50px" }}>Loading...</p>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      
       <header style={headerFooterStyle}>
         <h1>Host Dashboard</h1>
       </header>
 
-      <img 
-        src="/left.png" 
+      <img
+        src="/left.png"
         alt="Left"
         style={{
           position: "absolute",
@@ -76,12 +86,12 @@ export default function HostDashboard() {
           left: "13px",
           width: "55px",
           height: "55px",
-          objectFit: "cover"
+          objectFit: "cover",
         }}
       />
 
-      <img 
-        src="/right.png" 
+      <img
+        src="/right.png"
         alt="Right"
         style={{
           position: "absolute",
@@ -89,21 +99,22 @@ export default function HostDashboard() {
           right: "13px",
           width: "50px",
           height: "50px",
-          objectFit: "cover"
+          objectFit: "cover",
         }}
       />
 
       <main style={mainStyle}>
         <p>Welcome to the Host Dashboard</p>
 
-        <div style={{ 
-          display: "flex", 
-          flexDirection: "column", 
-          gap: "20px", 
-          width: "100%", 
-          maxWidth: "250px" 
-        }}>
-          
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "20px",
+            width: "100%",
+            maxWidth: "250px",
+          }}
+        >
           <button onClick={() => router.push("/host/scan")} style={buttonStyle}>
             Scan QR Code
           </button>
@@ -121,11 +132,9 @@ export default function HostDashboard() {
       <footer style={headerFooterStyle}>
         <p>© 2026</p>
       </footer>
-
     </div>
   );
 }
-
 
 // ------------------------
 // Styles
@@ -134,7 +143,7 @@ export default function HostDashboard() {
 const headerFooterStyle = {
   backgroundColor: "#FFD700",
   padding: "20px",
-  textAlign: "center"
+  textAlign: "center",
 };
 
 const mainStyle = {
@@ -144,7 +153,7 @@ const mainStyle = {
   justifyContent: "center",
   alignItems: "center",
   gap: "30px",
-  padding: "20px"
+  padding: "20px",
 };
 
 const buttonStyle = {
@@ -156,5 +165,5 @@ const buttonStyle = {
   color: "white",
   cursor: "pointer",
   width: "100%",
-  textAlign: "center"
+  textAlign: "center",
 };

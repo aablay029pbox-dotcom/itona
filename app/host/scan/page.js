@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrowserMultiFormatReader } from "@zxing/library";
@@ -17,32 +18,60 @@ export default function ScanPage() {
   const codeReaderRef = useRef(null);
   const scanLockRef = useRef(false);
 
+  // Keep selectedEvent ref updated
   useEffect(() => {
     selectedEventRef.current = selectedEvent;
   }, [selectedEvent]);
 
+  // Initial setup
   useEffect(() => {
+    const hostInfo = sessionStorage.getItem("hostInfo");
+    if (!hostInfo) {
+      router.push("/host");
+      return;
+    }
+
     fetchEvents();
     codeReaderRef.current = new BrowserMultiFormatReader();
     startScanner();
 
+    const interval = setInterval(async () => {
+      const hostInfo = JSON.parse(sessionStorage.getItem("hostInfo"));
+      if (!hostInfo?.id) {
+        clearInterval(interval);
+        router.push("/host");
+        return;
+      }
+
+      const { data: hostData, error } = await supabase
+        .from("hosts")
+        .select("current_session")
+        .eq("id", hostInfo.id)
+        .single();
+
+      if (error || hostData?.current_session !== hostInfo.current_session) {
+        sessionStorage.removeItem("hostInfo");
+        clearInterval(interval);
+        alert("You have been logged out by the admin.");
+        router.push("/host");
+      }
+    }, 5000);
+
     return () => {
       if (codeReaderRef.current) codeReaderRef.current.reset();
+      clearInterval(interval);
     };
-  }, []);
+  }, [router]);
 
-  // --- FIX: Only show open events in dropdown ---
+  // Fetch events (only open ones)
   const fetchEvents = async () => {
     const { data } = await supabase.from("events").select("*");
-
-    // Only include events where is_open = true
     const openEvents = (data || []).filter(evt => evt.is_open);
-
     setEvents(openEvents);
-
     if (openEvents.length > 0) setSelectedEvent(openEvents[0].id);
   };
 
+  // Start QR scanner
   const startScanner = async () => {
     if (!videoRef.current) return;
 
@@ -51,7 +80,6 @@ export default function ScanPage() {
       videoRef.current,
       async (result, err) => {
         if (err && err.name !== "NotFoundException") console.error(err);
-
         if (result && !scanLockRef.current) {
           scanLockRef.current = true;
           await handleScan(result.getText());
@@ -60,20 +88,30 @@ export default function ScanPage() {
     );
   };
 
+  // Handle scanned QR (supports plain ID or JSON)
   const handleScan = async (scannedText) => {
     const eventId = selectedEventRef.current;
     if (!eventId) {
       showPopup("error", "Please select an open event first.");
+      scanLockRef.current = false;
       return false;
     }
 
-    let studentId;
-    try {
-      const data = JSON.parse(scannedText);
-      studentId = data.id?.trim();
-      if (!studentId) throw new Error();
-    } catch {
+    let studentId = scannedText?.trim();
+
+    // If scannedText looks like JSON, try to parse it
+    if (studentId.startsWith("{") && studentId.endsWith("}")) {
+      try {
+        const data = JSON.parse(studentId);
+        studentId = data.id?.trim();
+      } catch {
+        // Invalid JSON, continue with the plain text
+      }
+    }
+
+    if (!studentId) {
       showPopup("error", "Invalid QR Code format.");
+      scanLockRef.current = false;
       return false;
     }
 
@@ -86,6 +124,7 @@ export default function ScanPage() {
 
       if (!student) {
         showPopup("error", "Student not found.");
+        scanLockRef.current = false;
         return false;
       }
 
@@ -99,6 +138,7 @@ export default function ScanPage() {
       if (existing) {
         setScannedStudent(student);
         showPopup("already", "Student already attended this event.");
+        scanLockRef.current = false;
         return false;
       }
 
@@ -110,14 +150,17 @@ export default function ScanPage() {
 
       setScannedStudent(student);
       showPopup("success", "Attendance successfully recorded.");
+      scanLockRef.current = false;
       return true;
     } catch (err) {
       console.error(err);
       showPopup("error", "Failed to mark attendance.");
+      scanLockRef.current = false;
       return false;
     }
   };
 
+  // Popup helpers
   const showPopup = (type, message) => {
     setPopupType(type);
     setPopupMessage(message);

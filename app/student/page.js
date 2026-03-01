@@ -8,6 +8,7 @@ export default function StudentPage() {
   const router = useRouter();
 
   const [formData, setFormData] = useState({
+    id: "",
     lastname: "",
     firstname: "",
     course: "",
@@ -22,72 +23,92 @@ export default function StudentPage() {
   };
 
   const handleLogin = async () => {
-    let { lastname, firstname, course, yearSection } = formData;
+    let { id, lastname, firstname, course, yearSection } = formData;
 
-    if (!lastname || !firstname || !course || !yearSection) {
+    // 1️⃣ Validate inputs
+    if (!id || !lastname || !firstname || !course || !yearSection) {
       alert("Please complete all fields");
       return;
     }
 
     // Clean inputs
+    id = id.trim();
     lastname = lastname.trim();
     firstname = firstname.trim();
 
     try {
-      // 1️⃣ Check if student already exists
-      const { data: existingStudent, error: fetchError } = await supabase
+      // 2️⃣ Check if the student ID already exists
+      const { data: existingStudentById, error: fetchIdError } = await supabase
         .from("students")
         .select("*")
-        .ilike("lastname", lastname)
-        .ilike("firstname", firstname)
-        .eq("course", course)
-        .eq("yearsection", yearSection)
+        .eq("id", id)
         .maybeSingle();
 
-      if (fetchError) throw fetchError;
-
-      let studentRecord;
-
-      // 2️⃣ If exists → use it
-      if (existingStudent) {
-        studentRecord = existingStudent;
-      } else {
-        // 3️⃣ If not exists → insert new
-        const { data: inserted, error: insertError } = await supabase
-          .from("students")
-          .insert([
-            {
-              lastname,
-              firstname,
-              course,
-              yearsection: yearSection
-            }
-          ])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-
-        studentRecord = inserted;
+      if (fetchIdError) {
+        console.error("Fetch ID Error:", fetchIdError);
+        throw new Error(fetchIdError.message || JSON.stringify(fetchIdError));
       }
 
-      // Save student info (no loginDate)
-      const studentData = {
-        id: studentRecord.id,
-        firstname: studentRecord.firstname,
-        lastname: studentRecord.lastname,
-        course: studentRecord.course,
-        yearsection: studentRecord.yearsection
-      };
+      if (existingStudentById) {
+        // ID exists → check if other fields match
+        if (
+          existingStudentById.lastname !== lastname ||
+          existingStudentById.firstname !== firstname ||
+          existingStudentById.course !== course ||
+          existingStudentById.yearsection !== yearSection
+        ) {
+          alert(
+            "Student ID already exists but the provided details do not match the existing record."
+          );
+          return; // Block login
+        }
 
-      localStorage.setItem("studentInfo", JSON.stringify(studentData));
+        alert("Login successful using existing record.");
+        setStudentLocal(existingStudentById);
+        return;
+      }
 
-      router.push("/student/qr");
+      // 3️⃣ Insert new student
+      const { data: inserted, error: insertError } = await supabase
+        .from("students")
+        .insert([
+          {
+            id, // manually provided ID
+            lastname,
+            firstname,
+            course,
+            yearsection: yearSection // exact column name
+          }
+        ])
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error("Insert Error:", insertError);
+        throw new Error(insertError.message || JSON.stringify(insertError));
+      }
+
+      alert("New student record created and logged in.");
+      setStudentLocal(inserted);
 
     } catch (err) {
       console.error("Login Error:", err);
-      alert("Failed to login student");
+      alert("Failed to login student: " + (err.message || JSON.stringify(err)));
     }
+  };
+
+  // Helper to save student info to localStorage
+  const setStudentLocal = (studentRecord) => {
+    const studentData = {
+      id: studentRecord.id,
+      firstname: studentRecord.firstname,
+      lastname: studentRecord.lastname,
+      course: studentRecord.course,
+      yearsection: studentRecord.yearsection
+    };
+
+    localStorage.setItem("studentInfo", JSON.stringify(studentData));
+    router.push("/student/qr");
   };
 
   return (
@@ -98,6 +119,15 @@ export default function StudentPage() {
       </header>
 
       <main style={mainStyle}>
+
+        <input
+          type="text"
+          name="id"
+          placeholder="Student ID"
+          value={formData.id}
+          onChange={handleChange}
+          style={inputStyle}
+        />
 
         <input
           type="text"
@@ -179,8 +209,7 @@ const mainStyle = {
   justifyContent: "center",
   alignItems: "center",
   gap: "15px",
-  padding: "20px",
-  position: "relative"
+  padding: "20px"
 };
 
 const inputStyle = {

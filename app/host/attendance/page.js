@@ -19,17 +19,42 @@ export default function AttendancePage() {
   const [filter, setFilter] = useState({ course: "", yearSection: "" });
 
   // ============================
-  // PROTECT HOST PAGE
+  // HOST PROTECTION + LIVE SESSION CHECK
   // ============================
   useEffect(() => {
     const hostInfo = sessionStorage.getItem("hostInfo");
     if (!hostInfo) {
       router.push("/host");
-    } else {
-      fetchEvents();
-      fetchAllStudents();
+      return;
     }
-  }, []);
+
+    fetchEvents();
+    fetchAllStudents();
+
+    const interval = setInterval(async () => {
+      const hostInfo = JSON.parse(sessionStorage.getItem("hostInfo"));
+      if (!hostInfo?.id) {
+        clearInterval(interval);
+        router.push("/host");
+        return;
+      }
+
+      const { data: hostData, error } = await supabase
+        .from("hosts")
+        .select("current_session")
+        .eq("id", hostInfo.id)
+        .single();
+
+      if (error || hostData?.current_session !== hostInfo.current_session) {
+        sessionStorage.removeItem("hostInfo");
+        clearInterval(interval);
+        alert("You have been logged out by the admin.");
+        router.push("/host");
+      }
+    }, 5000); // check every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [router]);
 
   // ============================
   // FETCH EVENTS
@@ -43,7 +68,7 @@ export default function AttendancePage() {
   };
 
   // ============================
-  // FETCH ALL STUDENTS (for dropdowns)
+  // FETCH ALL STUDENTS
   // ============================
   const fetchAllStudents = async () => {
     const { data } = await supabase
@@ -109,7 +134,7 @@ export default function AttendancePage() {
   };
 
   // ============================
-  // FETCH ALL FOR PDF (LIMIT 60)
+  // FETCH FOR PDF (LIMIT 60)
   // ============================
   const fetchAllForDownload = async () => {
     try {

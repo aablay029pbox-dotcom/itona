@@ -22,6 +22,17 @@ export default function AdminHostsPage() {
   }, []);
 
   // ============================
+  // LIVE REFRESH EVERY 10 SECONDS
+  // ============================
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchHosts();
+    }, 10000); // 10 seconds
+
+    return () => clearInterval(interval); // cleanup
+  }, []);
+
+  // ============================
   // FETCH HOSTS
   // ============================
   const fetchHosts = async () => {
@@ -30,7 +41,13 @@ export default function AdminHostsPage() {
     if (error) {
       console.error("Error fetching hosts:", error);
     } else {
-      setHosts(data);
+      // Sort: active hosts first
+      const sortedHosts = data.sort((a, b) => {
+        const aActive = a.current_session ? 1 : 0;
+        const bActive = b.current_session ? 1 : 0;
+        return bActive - aActive; // active (1) first
+      });
+      setHosts(sortedHosts);
     }
     setLoading(false);
   };
@@ -49,18 +66,26 @@ export default function AdminHostsPage() {
   };
 
   // ============================
-  // TOGGLE ACTIVE STATUS
+  // FORCE LOGOUT (SET ACTIVE TO FALSE)
   // ============================
-  const toggleActive = async (host) => {
+  const forceLogout = async (host) => {
+    if (!confirm(`Force logout ${host.username}?`)) return;
     const { error } = await supabase
       .from("hosts")
-      .update({ is_active: !host.is_active })
+      .update({ current_session: null })
       .eq("id", host.id);
     if (error) {
-      alert("Error updating host: " + error.message);
+      alert("Error logging out host: " + error.message);
     } else {
       fetchHosts();
     }
+  };
+
+  // ============================
+  // CHECK IF HOST IS ACTIVE
+  // ============================
+  const isHostActive = (host) => {
+    return host.current_session ? true : false;
   };
 
   return (
@@ -72,6 +97,8 @@ export default function AdminHostsPage() {
       <main style={mainStyle}>
         {loading ? (
           <p>Loading hosts...</p>
+        ) : hosts.length === 0 ? (
+          <p>No hosts found.</p>
         ) : (
           hosts.map((host) => (
             <div key={host.id} style={cardStyle}>
@@ -79,18 +106,21 @@ export default function AdminHostsPage() {
                 <strong>Username:</strong> {host.username}
               </p>
               <p>
-                <strong>Active:</strong>{" "}
-                {host.is_active ? "Yes" : "No"}
+                <strong>Active:</strong> {isHostActive(host) ? "Yes" : "No"}
               </p>
               <div style={{ display: "flex", gap: "10px" }}>
                 <button
-                  style={{ ...buttonStyle, backgroundColor: host.is_active ? "#999" : "#4caf50" }}
-                  onClick={() => toggleActive(host)}
+                  style={{
+                    ...buttonStyle,
+                    backgroundColor: isHostActive(host) ? "#e74c3c" : "#999",
+                  }}
+                  onClick={() => forceLogout(host)}
+                  disabled={!isHostActive(host)}
                 >
-                  {host.is_active ? "Deactivate" : "Activate"}
+                  Force Logout
                 </button>
                 <button
-                  style={{ ...buttonStyle, backgroundColor: "#e74c3c" }}
+                  style={{ ...buttonStyle, backgroundColor: "#4caf50" }}
                   onClick={() => handleDelete(host.id)}
                 >
                   Delete

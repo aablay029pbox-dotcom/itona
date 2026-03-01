@@ -10,9 +10,8 @@ export default function QRPage() {
 
   useEffect(() => {
     const data = localStorage.getItem("studentInfo");
-
     if (!data) {
-      router.push("/student");
+      router.push("/student"); // redirect if not logged in
     } else {
       setStudent(JSON.parse(data));
     }
@@ -21,61 +20,23 @@ export default function QRPage() {
   if (!student) return null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+    <div style={{ position: "relative", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       
       {/* Header */}
-      <header style={{ backgroundColor: "#FFD700", padding: "20px", textAlign: "center" }}>
+      <header style={headerFooterStyle}>
         <h1>Your QR Code</h1>
+        <img src="/left.png" alt="Left" style={cornerImageStyleLeft} />
+        <img src="/right.png" alt="Right" style={cornerImageStyleRight} />
       </header>
-      <img 
-  src="/left.png" 
-  alt="Left"
-  style={{
-    position: "absolute",
-    top: "10px",
-    left: "13px",
-    width: "55px",
-    height: "55px",
-    objectFit: "cover"
-  }}
-/>
-
-<img 
-  src="/right.png" 
-  alt="Right"
-  style={{
-    position: "absolute",
-    top: "10px",
-    right: "13px",
-    width: "50px",
-    height: "50px",
-    objectFit: "cover"
-  }}
-/>
 
       {/* Main */}
-      <main
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: "25px"
-        }}
-      >
+      <main style={mainStyle}>
 
-        {/* ✅ White QR Background Card */}
-        <div
-          style={{
-            backgroundColor: "white",
-            padding: "25px",
-            borderRadius: "15px",
-            boxShadow: "0 4px 15px rgba(0,0,0,0.2)"
-          }}
-        >
+        {/* QR Code Card */}
+        <div style={qrCardStyle}>
+          {/* QR now only encodes student ID */}
           <QRCode
-            value={JSON.stringify(student)}
+            value={student.id}
             size={220}
             bgColor="#FFFFFF"
             fgColor="#000000"
@@ -84,28 +45,68 @@ export default function QRPage() {
 
         {/* Student Info */}
         <div style={{ textAlign: "center" }}>
+          <p><strong>ID:</strong> {student.id}</p>
           <p><strong>Last Name:</strong> {student.lastname}</p>
           <p><strong>First Name:</strong> {student.firstname}</p>
           <p><strong>Course:</strong> {student.course}</p>
           <p><strong>Year & Section:</strong> {student.yearsection}</p>
         </div>
 
-        <button
-          onClick={() => router.push("/")}
-          style={buttonStyle}
-        >
+        <button onClick={() => router.push("/student")} style={buttonStyle}>
           Back to Home
         </button>
       </main>
 
       {/* Footer */}
-      <footer style={{ backgroundColor: "#FFD700", padding: "15px", textAlign: "center" }}>
+      <footer style={headerFooterStyle}>
         <p>© 2026</p>
       </footer>
 
     </div>
   );
 }
+
+const headerFooterStyle = {
+  backgroundColor: "#FFD700",
+  padding: "20px",
+  textAlign: "center",
+  position: "relative"
+};
+
+const cornerImageStyleLeft = {
+  position: "absolute",
+  top: "10px",
+  left: "15px",
+  width: "55px",
+  height: "55px",
+  objectFit: "cover"
+};
+
+const cornerImageStyleRight = {
+  position: "absolute",
+  top: "10px",
+  right: "15px",
+  width: "55px",
+  height: "55px",
+  objectFit: "cover"
+};
+
+const mainStyle = {
+  flex: 1,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  alignItems: "center",
+  gap: "25px",
+  padding: "20px"
+};
+
+const qrCardStyle = {
+  backgroundColor: "white",
+  padding: "25px",
+  borderRadius: "15px",
+  boxShadow: "0 4px 15px rgba(0,0,0,0.2)"
+};
 
 const buttonStyle = {
   padding: "12px 30px",
@@ -114,5 +115,7 @@ const buttonStyle = {
   border: "none",
   backgroundColor: "#f4b400",
   color: "white",
-  cursor: "pointer"
+  cursor: "pointer",
+  transition: "0.2s",
+  marginTop: "10px"
 };
