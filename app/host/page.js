@@ -8,33 +8,78 @@ export default function HostLoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setLoading(true);
+
     try {
-      const { data, error } = await supabase
-        .from("hosts")
+      // 🔐 ADMIN LOGIN (from admins table)
+      const { data: adminData, error: adminError } = await supabase
+        .from("admins")
         .select("*")
         .eq("username", username)
-        .eq("password", password)
+        .eq("password", password) // replace with hashed password in production
         .single();
 
-      if (error || !data) {
-        alert("Invalid username or password");
+      if (adminData) {
+        // ✅ Generate a unique session token
+        const sessionToken = crypto.randomUUID();
+
+        // Save session token in Supabase
+        await supabase
+          .from("admins")
+          .update({ current_session: sessionToken })
+          .eq("id", adminData.id);
+
+        // Save admin session in sessionStorage
+        sessionStorage.setItem(
+          "adminInfo",
+          JSON.stringify({ id: adminData.id, username: adminData.username, current_session: sessionToken })
+        );
+
+        router.push("/admin");
         return;
       }
 
-      // Save host info in session
+      // 🟡 NORMAL HOST LOGIN (Supabase)
+      const { data: hostData, error: hostError } = await supabase
+        .from("hosts")
+        .select("*")
+        .eq("username", username)
+        .eq("password", password) // replace with hashed password in production
+        .single();
+
+      if (hostError || !hostData) {
+        alert("Invalid username or password");
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Generate a unique session token
+      const hostSessionToken = crypto.randomUUID();
+
+      // Save session token in Supabase
+      await supabase
+        .from("hosts")
+        .update({ current_session: hostSessionToken })
+        .eq("id", hostData.id);
+
+      // Save host session in sessionStorage
       sessionStorage.setItem(
         "hostInfo",
-        JSON.stringify({ id: data.id, username: data.username })
+        JSON.stringify({ id: hostData.id, username: hostData.username, current_session: hostSessionToken })
       );
 
       router.push("/host/dashboard");
+
     } catch (err) {
       console.error(err);
       alert("Login failed");
     }
+
+    setLoading(false);
   };
 
   return (
@@ -42,36 +87,41 @@ export default function HostLoginPage() {
       <header style={headerFooterStyle}>
         <h1>Host Login</h1>
       </header>
-<img 
-  src="/left.png" 
-  alt="Left"
-  style={{
-    position: "absolute",
-    top: "10px",
-    left: "13px",
-    width: "55px",
-    height: "55px",
-    objectFit: "cover"
-  }}
-/>
+      <img 
+        src="/left.png" 
+        alt="Left"
+        style={{
+          position: "absolute",
+          top: "10px",
+          left: "13px",
+          width: "55px",
+          height: "55px",
+          objectFit: "cover"
+        }}
+      />
 
-<img 
-  src="/right.png" 
-  alt="Right"
-  style={{
-    position: "absolute",
-    top: "10px",
-    right: "13px",
-    width: "50px",
-    height: "50px",
-    objectFit: "cover"
-  }}
-/>
+      <img 
+        src="/right.png" 
+        alt="Right"
+        style={{
+          position: "absolute",
+          top: "10px",
+          right: "13px",
+          width: "50px",
+          height: "50px",
+          objectFit: "cover"
+        }}
+      />
 
       <main style={mainStyle}>
         <form
           onSubmit={handleLogin}
-          style={{ display: "flex", flexDirection: "column", gap: "15px", alignItems: "center" }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "15px",
+            alignItems: "center"
+          }}
         >
           <input
             type="text"
@@ -79,19 +129,36 @@ export default function HostLoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             style={inputStyle}
+            required
           />
+
           <input
             type="password"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             style={inputStyle}
+            required
           />
 
-          {/* Buttons stacked vertically */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "15px", width: "100%", maxWidth: "250px" }}>
-            <button type="submit" style={buttonStyle}>Login</button>
-            <button type="button" style={buttonStyle} onClick={() => router.push("/")}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "15px",
+              width: "100%",
+              maxWidth: "250px"
+            }}
+          >
+            <button type="submit" style={buttonStyle} disabled={loading}>
+              {loading ? "Logging in..." : "Login"}
+            </button>
+
+            <button
+              type="button"
+              style={buttonStyle}
+              onClick={() => router.push("/")}
+            >
               Back
             </button>
           </div>
@@ -108,6 +175,7 @@ export default function HostLoginPage() {
 // ------------------------
 // Styles
 // ------------------------
+
 const headerFooterStyle = {
   backgroundColor: "#FFD700",
   padding: "20px",
@@ -139,5 +207,5 @@ const buttonStyle = {
   backgroundColor: "#f4b400",
   color: "white",
   cursor: "pointer",
-  width: "100%" // full-width buttons
+  width: "100%"
 };

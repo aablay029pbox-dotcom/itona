@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrowserMultiFormatReader } from "@zxing/library";
@@ -7,13 +6,9 @@ import { supabase } from "../../lib/supabase";
 
 export default function ScanPage() {
   const router = useRouter();
-
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState("");
-
-  const [popupType, setPopupType] = useState(null); 
-  // "success" | "already" | "error"
-
+  const [popupType, setPopupType] = useState(null);
   const [popupMessage, setPopupMessage] = useState("");
   const [scannedStudent, setScannedStudent] = useState(null);
 
@@ -32,16 +27,20 @@ export default function ScanPage() {
     startScanner();
 
     return () => {
-      if (codeReaderRef.current) {
-        codeReaderRef.current.reset();
-      }
+      if (codeReaderRef.current) codeReaderRef.current.reset();
     };
   }, []);
 
+  // --- FIX: Only show open events in dropdown ---
   const fetchEvents = async () => {
     const { data } = await supabase.from("events").select("*");
-    setEvents(data || []);
-    if (data && data.length > 0) setSelectedEvent(data[0].id);
+
+    // Only include events where is_open = true
+    const openEvents = (data || []).filter(evt => evt.is_open);
+
+    setEvents(openEvents);
+
+    if (openEvents.length > 0) setSelectedEvent(openEvents[0].id);
   };
 
   const startScanner = async () => {
@@ -51,19 +50,11 @@ export default function ScanPage() {
       null,
       videoRef.current,
       async (result, err) => {
-        if (err && err.name !== "NotFoundException") {
-          console.error(err);
-        }
+        if (err && err.name !== "NotFoundException") console.error(err);
 
         if (result && !scanLockRef.current) {
-          const success = await handleScan(result.getText());
-
-          if (success) {
-            scanLockRef.current = true;
-            setTimeout(() => {
-              scanLockRef.current = false;
-            }, 2000);
-          }
+          scanLockRef.current = true;
+          await handleScan(result.getText());
         }
       }
     );
@@ -72,7 +63,7 @@ export default function ScanPage() {
   const handleScan = async (scannedText) => {
     const eventId = selectedEventRef.current;
     if (!eventId) {
-      showPopup("error", "Please select an event first.");
+      showPopup("error", "Please select an open event first.");
       return false;
     }
 
@@ -87,7 +78,6 @@ export default function ScanPage() {
     }
 
     try {
-      // Get student info
       const { data: student } = await supabase
         .from("students")
         .select("*")
@@ -99,7 +89,6 @@ export default function ScanPage() {
         return false;
       }
 
-      // Check if already attended
       const { data: existing } = await supabase
         .from("attendance")
         .select("*")
@@ -113,7 +102,6 @@ export default function ScanPage() {
         return false;
       }
 
-      // Insert attendance
       const { error } = await supabase.from("attendance").insert([
         { student_id: studentId, event_id: eventId },
       ]);
@@ -123,7 +111,6 @@ export default function ScanPage() {
       setScannedStudent(student);
       showPopup("success", "Attendance successfully recorded.");
       return true;
-
     } catch (err) {
       console.error(err);
       showPopup("error", "Failed to mark attendance.");
@@ -140,6 +127,7 @@ export default function ScanPage() {
     setPopupType(null);
     setPopupMessage("");
     setScannedStudent(null);
+    scanLockRef.current = false;
   };
 
   const getPopupColor = () => {
@@ -150,13 +138,12 @@ export default function ScanPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      
       <header style={headerFooterStyle}>
         <h1>Scan QR Code</h1>
       </header>
 
       <main style={mainStyle}>
-        {events.length > 0 && (
+        {events.length > 0 ? (
           <select
             value={selectedEvent}
             onChange={(e) => setSelectedEvent(e.target.value)}
@@ -168,6 +155,8 @@ export default function ScanPage() {
               </option>
             ))}
           </select>
+        ) : (
+          <p style={{ color: "#888" }}>No open events available.</p>
         )}
 
         <video
@@ -184,14 +173,10 @@ export default function ScanPage() {
         <p>© 2026</p>
       </footer>
 
-      {/* UNIVERSAL POPUP */}
       {popupType && (
         <div style={popupOverlay} onClick={closePopup}>
           <div style={{ ...popupBox, borderTop: `8px solid ${getPopupColor()}` }}>
-            <h2 style={{ color: getPopupColor(), marginBottom: "15px" }}>
-              {popupMessage}
-            </h2>
-
+            <h2 style={{ color: getPopupColor(), marginBottom: "15px" }}>{popupMessage}</h2>
             {scannedStudent && (
               <>
                 <p><strong>Last Name:</strong> {scannedStudent.lastname}</p>
@@ -200,7 +185,6 @@ export default function ScanPage() {
                 <p><strong>Section:</strong> {scannedStudent.yearsection}</p>
               </>
             )}
-
             <p style={{ marginTop: "15px", fontSize: "14px", color: "#888" }}>
               (Click anywhere to close)
             </p>
@@ -212,7 +196,6 @@ export default function ScanPage() {
 }
 
 /* ---------------- Styles ---------------- */
-
 const headerFooterStyle = {
   backgroundColor: "#FFD700",
   padding: "20px",
