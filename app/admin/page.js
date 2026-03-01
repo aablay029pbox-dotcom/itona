@@ -14,7 +14,7 @@ export default function AdminPage() {
     if (!adminInfo) {
       router.push("/host");
     }
-  }, []);
+  }, [router]);
 
   return (
     <div style={containerStyle}>
@@ -56,7 +56,18 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* ================= DASHBOARD ================= */}
+        {/* ================= STUDENTS ================= */}
+        <div style={cardStyle}>
+          <h2>Students</h2>
+          <button
+            style={buttonStyle}
+            onClick={() => router.push("/admin/students")}
+          >
+            Manage Students
+          </button>
+        </div>
+
+        {/* ================= BACK BUTTON ================= */}
         <button
           style={{ ...buttonStyle, backgroundColor: "#999" }}
           onClick={() => router.push("/host")}
@@ -75,6 +86,7 @@ export default function AdminPage() {
 // ============================
 // STYLES
 // ============================
+
 const containerStyle = {
   display: "flex",
   flexDirection: "column",
